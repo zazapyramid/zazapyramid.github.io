@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>3D Просмотрщик Пирамиды (v17 - Микро-комнаты)</title>
+    <title>3D Просмотрщик Пирамиды (v17 - Финальное выравнивание)</title>
     <style>
         body { margin: 0; background-color: #1a2a3a; color: #fff; font-family: sans-serif; }
         canvas { display: block; }
@@ -56,7 +56,7 @@
         const sideRoomHeight = 34;
         const newRoomSize = 14;
         const tinyRoomSize = 9;
-        const microRoomSize = 4; // << НОВЫЙ ПАРАМЕТР
+        const microRoomSize = 4;
         const wallThickness = 1;
         const thickWallThickness = 3;
 
@@ -158,12 +158,12 @@
                 side: createMaterial(0x88aaff),
                 new: createMaterial(0xf0a0f0),
                 tiny: createMaterial(0xa0f0f0),
-                micro: createMaterial(0xffff00), // << НОВЫЙ МАТЕРИАЛ
+                micro: createMaterial(0xffff00),
                 centerWall: createMaterial(0xffaaaa),
                 sideWall: createMaterial(0x99dd99),
                 newWall: createMaterial(0xd080d0),
                 tinyWall: createMaterial(0x80d0d0),
-                microWall: createMaterial(0xffffaa), // << НОВЫЙ МАТЕРИАЛ ДЛЯ СТЕН
+                microWall: createMaterial(0xffffaa),
                 thickWall: createMaterial(0x669966)
             };
 
@@ -179,8 +179,8 @@
             const nr_s_half = nr_s / 2;
             const tr_s = tinyRoomSize;
             const tr_s_half = tr_s / 2;
-            const mr_s = microRoomSize; // << НОВЫЙ ПАРАМЕТР
-            const mr_s_half = mr_s / 2; // << НОВЫЙ ПАРАМЕТР
+            const mr_s = microRoomSize;
+            const mr_s_half = mr_s / 2;
             const tw = thickWallThickness;
             const tw_half = tw / 2;
 
@@ -211,13 +211,15 @@
                 new_rooms.push({ x: z, y: setB_Y, z: x, w: nr_s, h: nr_s, d: nr_s, type: 'new' });
             });
 
-            const setC_Y = t + nr_s_half;
+            // ИСПРАВЛЕНО: Убрана лишняя толщина стены 't' для комнат на "полу"
+            const setC_Y = nr_s_half;
             const setC_pos = sr_l_half + t + nr_s_half;
              [[setC_pos, setC_pos], [setC_pos, -setC_pos], [-setC_pos, setC_pos], [-setC_pos, -setC_pos]].forEach(([x, z]) => {
                 new_rooms.push({ x, y: setC_Y, z, w: nr_s, h: nr_s, d: nr_s, type: 'new' });
             });
 
-            const setD_Y = t + nr_s_half;
+            // ИСПРАВЛЕНО: Убрана лишняя толщина стены 't' для комнат на "полу"
+            const setD_Y = nr_s_half;
             const setD_center_offset = tw_half + nr_s_half;
             const setD_outer_offset = c_half + t + sr_w + t + nr_s_half;
             [[setD_center_offset, setD_outer_offset], [-setD_center_offset, setD_outer_offset], [setD_center_offset, -setD_outer_offset], [-setD_center_offset, -setD_outer_offset]].forEach(([x, z]) => {
@@ -238,37 +240,38 @@
                 const z_top = nz - sign_z * (nr_s_half - tr_s_half);
                 tiny_rooms.push({ x: x_top, y: y_top, z: z_top, w: tr_s, h: tr_s, d: tr_s, type: 'tiny' });
 
+                const y_side = ny - nr_s_half + tr_s_half;
+                
                 const x_side1 = nx + sign_x * (nr_s_half + t + tr_s_half);
                 const z_side1 = nz - sign_z * (nr_s_half - tr_s_half);
-                tiny_rooms.push({ x: x_side1, y: ny - mr_s_half-t, z: z_side1, w: tr_s, h: tr_s, d: tr_s, type: 'tiny' });
+                tiny_rooms.push({ x: x_side1, y: y_side, z: z_side1, w: tr_s, h: tr_s, d: tr_s, type: 'tiny' });
 
                 const x_side2 = nx - sign_x * (nr_s_half - tr_s_half);
                 const z_side2 = nz + sign_z * (nr_s_half + t + tr_s_half);
-                tiny_rooms.push({ x: x_side2, y: ny - mr_s_half-t, z: z_side2, w: tr_s, h: tr_s, d: tr_s, type: 'tiny' });
+                tiny_rooms.push({ x: x_side2, y: y_side, z: z_side2, w: tr_s, h: tr_s, d: tr_s, type: 'tiny' });
             });
             rooms.push(...tiny_rooms);
 
-            // << НОВЫЙ БЛОК: Set F (micro rooms) >>
+            // Set F (micro rooms)
             tiny_rooms.forEach(tr => {
                 const {x: tx, y: ty, z: tz} = tr;
                 const sign_x = Math.sign(tx) || 1;
                 const sign_z = Math.sign(tz) || 1;
                 
-                // Top room (shifted to inner corner)
                 const y_top = ty + tr_s_half + t + mr_s_half;
                 const x_top = tx - sign_x * (tr_s_half - mr_s_half);
                 const z_top = tz - sign_z * (tr_s_half - mr_s_half);
                 rooms.push({ x: x_top, y: y_top, z: z_top, w: mr_s, h: mr_s, d: mr_s, type: 'micro' });
 
-                // Side room 1 (adjacent to inner X-wall, shifted to inner corner)
+                const y_side = ty - tr_s_half + mr_s_half;
+
                 const x_side1 = tx + sign_x * (tr_s_half + t + mr_s_half);
                 const z_side1 = tz - sign_z * (tr_s_half - mr_s_half);
-                rooms.push({ x: x_side1, y: ty - mr_s_half - t, z: z_side1, w: mr_s, h: mr_s, d: mr_s, type: 'micro' });
+                rooms.push({ x: x_side1, y: y_side, z: z_side1, w: mr_s, h: mr_s, d: mr_s, type: 'micro' });
 
-                // Side room 2 (adjacent to inner Z-wall, shifted to inner corner)
                 const x_side2 = tx - sign_x * (tr_s_half - mr_s_half);
                 const z_side2 = tz + sign_z * (tr_s_half + t + mr_s_half);
-                rooms.push({ x: x_side2, y: ty - mr_s_half - t, z: z_side2, w: mr_s, h: mr_s, d: mr_s, type: 'micro' });
+                rooms.push({ x: x_side2, y: y_side, z: z_side2, w: mr_s, h: mr_s, d: mr_s, type: 'micro' });
             });
             
             // --- 2. Создание геометрии ---
