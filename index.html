@@ -55,7 +55,7 @@
         const sideRoomWidth = 34;
         const sideRoomHeight = 34;
         const newRoomSize = 14;
-        const tinyRoomSize = 4;
+        const tinyRoomSize = 9;
         const wallThickness = 1;
         const thickWallThickness = 3;
 
@@ -236,12 +236,12 @@
                 // Side room 1 (adjacent to inner X-wall, shifted to inner corner)
                 const x_side1 = nx + sign_x * (nr_s_half + t + tr_s_half);
                 const z_side1 = nz - sign_z * (nr_s_half - tr_s_half);
-                rooms.push({ x: x_side1, y: ny- tr_s-t, z: z_side1, w: tr_s, h: tr_s, d: tr_s, type: 'tiny' });
+                rooms.push({ x: x_side1, y: ny -t, z: z_side1, w: tr_s, h: tr_s, d: tr_s, type: 'tiny' });
 
                 // Side room 2 (adjacent to inner Z-wall, shifted to inner corner)
                 const x_side2 = nx - sign_x * (nr_s_half - tr_s_half);
                 const z_side2 = nz + sign_z * (nr_s_half + t + tr_s_half);
-                rooms.push({ x: x_side2, y: ny- tr_s-t, z: z_side2, w: tr_s, h: tr_s, d: tr_s, type: 'tiny' });
+                rooms.push({ x: x_side2, y: ny -t, z: z_side2, w: tr_s, h: tr_s, d: tr_s, type: 'tiny' });
             });
             
             // --- 2. Создание геометрии ---
