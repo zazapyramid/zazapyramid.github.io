@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>3D Просмотрщик Пирамиды (v9)</title>
+    <title>3D Просмотрщик Пирамиды (v10 - Финал)</title>
     <style>
         body { margin: 0; background-color: #1a2a3a; color: #fff; font-family: sans-serif; }
         canvas { display: block; }
@@ -74,7 +74,7 @@
             enableY: false,
             enableZ: false,
             showPyramid: true,
-            showRooms: true,
+            showVoids: true, // Новая опция
             showAsWalls: false,
             pyramidOpacity: 0.2,
         };
@@ -185,10 +185,10 @@
             addSolid(sr_w, sr_h, sr_l, sideRoomOffset, sideRoomOffsetY, 0, solidMaterial, solidRoomsGroup);
             addSolid(sr_w, sr_h, sr_l, -sideRoomOffset, sideRoomOffsetY, 0, solidMaterial, solidRoomsGroup);
 
-            // --- 2. Новые комнаты (Solid View) ---
+            // --- 2. Новые комнаты (Solid View) с ИСПРАВЛЕННЫМИ КООРДИНАТАМИ ---
             // Set A: 4 комнаты над центральной
             const setA_Y = c_size + t + nr_s_half;
-            const setA_Offset = tw_half + t + nr_s_half;
+            const setA_Offset = tw_half + nr_s_half; // Исправлено
             addSolid(nr_s, nr_s, nr_s, setA_Offset, setA_Y, setA_Offset, newRoomSolidMaterial, solidRoomsGroup);
             addSolid(nr_s, nr_s, nr_s, setA_Offset, setA_Y, -setA_Offset, newRoomSolidMaterial, solidRoomsGroup);
             addSolid(nr_s, nr_s, nr_s, -setA_Offset, setA_Y, setA_Offset, newRoomSolidMaterial, solidRoomsGroup);
@@ -196,8 +196,8 @@
             
             // Set B: 8 комнат над боковыми
             const setB_Y = sr_h + t + nr_s_half;
-            const setB_X_pos = tw_half + t + nr_s_half;
-            const setB_Z_pos = c_half + t + nr_s_half;
+            const setB_X_pos = tw_half + nr_s_half; // Исправлено
+            const setB_Z_pos = c_half + t + nr_s_half; // Это расстояние от стены боковой комнаты, не от толстой стены
             addSolid(nr_s, nr_s, nr_s, setB_X_pos, setB_Y, setB_Z_pos, newRoomSolidMaterial, solidRoomsGroup);
             addSolid(nr_s, nr_s, nr_s, -setB_X_pos, setB_Y, setB_Z_pos, newRoomSolidMaterial, solidRoomsGroup);
             addSolid(nr_s, nr_s, nr_s, setB_X_pos, setB_Y, -setB_Z_pos, newRoomSolidMaterial, solidRoomsGroup);
@@ -215,18 +215,14 @@
             addSolid(nr_s, nr_s, nr_s, setC_pos, setC_Y, -setC_pos, newRoomSolidMaterial, solidRoomsGroup);
             addSolid(nr_s, nr_s, nr_s, -setC_pos, setC_Y, -setC_pos, newRoomSolidMaterial, solidRoomsGroup);
 
-            // Set D: 8 крайних комнат на полу (ИСПРАВЛЕНО)
+            // Set D: 8 крайних комнат на полу
             const setD_Y = nr_s_half;
-            const setD_center_offset = tw_half + t + nr_s_half; // 1.5 + 1 + 7 = 9.5
-            const setD_outer_offset = c_half + t + sr_w + t + nr_s_half; // 33.5 + 1 + 34 + 1 + 7 = 76.5
-            
-            // На концах Z-оси
+            const setD_center_offset = tw_half + nr_s_half; // Исправлено
+            const setD_outer_offset = c_half + t + sr_w + t + nr_s_half;
             addSolid(nr_s, nr_s, nr_s,  setD_center_offset, setD_Y,  setD_outer_offset, newRoomSolidMaterial, solidRoomsGroup);
             addSolid(nr_s, nr_s, nr_s, -setD_center_offset, setD_Y,  setD_outer_offset, newRoomSolidMaterial, solidRoomsGroup);
             addSolid(nr_s, nr_s, nr_s,  setD_center_offset, setD_Y, -setD_outer_offset, newRoomSolidMaterial, solidRoomsGroup);
             addSolid(nr_s, nr_s, nr_s, -setD_center_offset, setD_Y, -setD_outer_offset, newRoomSolidMaterial, solidRoomsGroup);
-            
-            // На концах X-оси
             addSolid(nr_s, nr_s, nr_s,  setD_outer_offset, setD_Y,  setD_center_offset, newRoomSolidMaterial, solidRoomsGroup);
             addSolid(nr_s, nr_s, nr_s, -setD_outer_offset, setD_Y,  setD_center_offset, newRoomSolidMaterial, solidRoomsGroup);
             addSolid(nr_s, nr_s, nr_s,  setD_outer_offset, setD_Y, -setD_center_offset, newRoomSolidMaterial, solidRoomsGroup);
@@ -234,15 +230,17 @@
 
 
             // --- 3. Генерация всех стен для режима "Показать стены" ---
-            const createHollowBox = (width, height, depth, material, thickness = 1) => {
+            const createWalledBox = (innerW, innerH, innerD, material, t = 1) => {
                 const group = new THREE.Group();
-                const t = thickness;
-                group.add(new THREE.Mesh(new THREE.BoxGeometry(width, t, depth)).translateY(-height/2 + t/2));
-                group.add(new THREE.Mesh(new THREE.BoxGeometry(width, t, depth)).translateY(height/2 - t/2));
-                group.add(new THREE.Mesh(new THREE.BoxGeometry(t, height - 2*t, depth)).translateX(-width/2 + t/2));
-                group.add(new THREE.Mesh(new THREE.BoxGeometry(t, height - 2*t, depth)).translateX(width/2 - t/2));
-                group.add(new THREE.Mesh(new THREE.BoxGeometry(width - 2*t, height - 2*t, t)).translateZ(-depth/2 + t/2));
-                group.add(new THREE.Mesh(new THREE.BoxGeometry(width - 2*t, height - 2*t, t)).translateZ(depth/2 - t/2));
+                // Пол и Потолок
+                group.add(new THREE.Mesh(new THREE.BoxGeometry(innerW + 2 * t, t, innerD + 2 * t)).translateY(-innerH / 2 - t / 2));
+                group.add(new THREE.Mesh(new THREE.BoxGeometry(innerW + 2 * t, t, innerD + 2 * t)).translateY(innerH / 2 + t / 2));
+                // Стены по X
+                group.add(new THREE.Mesh(new THREE.BoxGeometry(t, innerH, innerD)).translateX(-innerW / 2 - t / 2));
+                group.add(new THREE.Mesh(new THREE.BoxGeometry(t, innerH, innerD)).translateX(innerW / 2 + t / 2));
+                // Стены по Z
+                group.add(new THREE.Mesh(new THREE.BoxGeometry(innerW, innerH, t)).translateZ(-innerD / 2 - t / 2));
+                group.add(new THREE.Mesh(new THREE.BoxGeometry(innerW, innerH, t)).translateZ(innerD / 2 + t / 2));
                 group.children.forEach(child => child.material = material);
                 return group;
             };
@@ -251,17 +249,19 @@
                 const { width, height, depth } = child.geometry.parameters;
                 const pos = child.position;
                 let mat;
-                if (child.material.color.getHex() === 0xff8888 || child.material === solidMaterial) {
+                if (child.material.color.getHex() === 0xff8888) {
+                    mat = wallMaterial.clone(); mat.color.set(0xffaaaa);
+                } else if (child.material === solidMaterial) {
                     mat = wallMaterial;
                 } else {
                     mat = newRoomWallMaterial;
                 }
-                const hollowBox = createHollowBox(width, height, depth, mat, t);
-                hollowBox.position.copy(pos);
-                wallStructureGroup.add(hollowBox);
+                const walledBox = createWalledBox(width, height, depth, mat, t);
+                walledBox.position.copy(pos);
+                wallStructureGroup.add(walledBox);
             });
             
-            // --- 4. Толстые стены (улучшенная логика) ---
+            // --- 4. Толстые стены ---
             const getPyramidHeightAt = (x, z) => pyramidHeight - Math.max(Math.abs(x), Math.abs(z)) * (pyramidHeight / (pyramidBase / 2));
             const addThickWallSegment = (w, h, d, x, y, z) => {
                 if (h < 1) return;
@@ -270,41 +270,25 @@
 
             const max_coord = Math.floor(pyramidBase / 2);
 
-            // Стена вдоль оси Z (на плоскости X=0)
-            for (let z = -max_coord; z <= max_coord; z++) {
-                const top_y = getPyramidHeightAt(tw_half, z);
-                let bottom_y = 0;
+            for (let i = -max_coord; i <= max_coord; i++) {
+                // Стена вдоль оси Z
+                const top_y_z = getPyramidHeightAt(tw_half, i);
+                let bottom_y_z = 0;
+                if (Math.abs(i) < c_half) bottom_y_z = c_size;
+                else if (Math.abs(i) > c_half + t && Math.abs(i) < c_half + t + sr_w) bottom_y_z = sr_h;
+                addThickWallSegment(tw, top_y_z - bottom_y_z, 1, 0, bottom_y_z + (top_y_z - bottom_y_z) / 2, i);
 
-                if (Math.abs(z) < c_half) {
-                    bottom_y = c_size;
-                } else if (Math.abs(z) > c_half + t && Math.abs(z) < c_half + t + sr_w) {
-                    if (Math.abs(0) < sr_l_half) {
-                       bottom_y = sr_h;
-                    }
-                }
-                const segment_h = top_y - bottom_y;
-                addThickWallSegment(tw, segment_h, 1, 0, bottom_y + segment_h / 2, z);
+                // Стена вдоль оси X
+                if (Math.abs(i) < tw_half) continue;
+                const top_y_x = getPyramidHeightAt(i, tw_half);
+                let bottom_y_x = 0;
+                if (Math.abs(i) < c_half) bottom_y_x = c_size;
+                else if (Math.abs(i) > c_half + t && Math.abs(i) < c_half + t + sr_w) bottom_y_x = sr_h;
+                addThickWallSegment(1, top_y_x - bottom_y_x, tw, i, bottom_y_x + (top_y_x - bottom_y_x) / 2, 0);
             }
 
-            // Стена вдоль оси X (на плоскости Z=0)
-            for (let x = -max_coord; x <= max_coord; x++) {
-                if (Math.abs(x) < tw_half) continue;
-
-                const top_y = getPyramidHeightAt(x, tw_half);
-                let bottom_y = 0;
-
-                if (Math.abs(x) < c_half) {
-                    bottom_y = c_size;
-                } else if (Math.abs(x) > c_half + t && Math.abs(x) < c_half + t + sr_w) {
-                     if (Math.abs(0) < sr_l_half) {
-                        bottom_y = sr_h;
-                     }
-                }
-                const segment_h = top_y - bottom_y;
-                addThickWallSegment(1, segment_h, tw, x, bottom_y + segment_h / 2, 0);
-            }
-
-            wallStructureGroup.visible = false;
+            wallStructureGroup.visible = params.showAsWalls;
+            solidRoomsGroup.visible = params.showVoids;
             scene.add(solidRoomsGroup);
             scene.add(wallStructureGroup);
         }
@@ -313,11 +297,11 @@
             const gui = new GUI();
             gui.title("Панель Управления");
 
-            const viewFolder = gui.addFolder('Видимость и Вид');
+            const viewFolder = gui.addFolder('Режим отображения');
             viewFolder.add(params, 'showPyramid').name('Пирамида').onChange(val => pyramidMesh.visible = val);
             viewFolder.add(params, 'pyramidOpacity', 0, 1).name('Прозрачность').onChange(val => pyramidMesh.material.opacity = val);
-            viewFolder.add(params, 'showRooms').name('Комнаты').onChange(toggleRoomVisibility);
-            viewFolder.add(params, 'showAsWalls').name('Показать стены').onChange(toggleRoomView);
+            viewFolder.add(params, 'showVoids').name('Показать пустоты').onChange(val => solidRoomsGroup.visible = val);
+            viewFolder.add(params, 'showAsWalls').name('Показать стены').onChange(val => wallStructureGroup.visible = val);
 
             const clippingFolder = gui.addFolder('Срезы');
             clippingFolder.add(params, 'enableY').name('Срез Y (Верх-Низ)').onChange(val => clippingPlanes.y.constant = val ? params.sliceY : pyramidHeight);
@@ -328,22 +312,6 @@
             clippingFolder.add(params, 'sliceZ', -pyramidBase / 2, pyramidBase / 2).name('Позиция среза Z').onChange(val => { if(params.enableZ) clippingPlanes.z.constant = val; });
         }
         
-        function toggleRoomView(showWalls) {
-            params.showAsWalls = showWalls;
-            toggleRoomVisibility(params.showRooms);
-        }
-
-        function toggleRoomVisibility(visible) {
-            params.showRooms = visible;
-            if (!visible) {
-                solidRoomsGroup.visible = false;
-                wallStructureGroup.visible = false;
-            } else {
-                solidRoomsGroup.visible = !params.showAsWalls;
-                wallStructureGroup.visible = params.showAsWalls;
-            }
-        }
-
         function onWindowResize() {
             camera.aspect = window.innerWidth / window.innerHeight;
             camera.updateProjectionMatrix();
