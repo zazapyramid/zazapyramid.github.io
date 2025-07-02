@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>3D Просмотрщик Пирамиды v22 (Стабильная версия)</title>
+    <title>3D Просмотрщик Пирамиды v25 (Новые умолчания)</title>
     <style>
         body { margin: 0; background-color: #1a2a3a; color: #fff; font-family: sans-serif; }
         canvas { display: block; }
@@ -63,24 +63,23 @@
         let scene, camera, renderer, controls;
         let pyramidMesh, solidRoomsGroup, wallStructureGroup;
         
-        // --- ВОЗВРАЩЕНО: Простой и надежный объект с плоскостями отсечения ---
         const clippingPlanes = {
             x: new THREE.Plane(new THREE.Vector3(-1, 0, 0), pyramidBase / 2),
             y: new THREE.Plane(new THREE.Vector3(0, -1, 0), pyramidHeight),
             z: new THREE.Plane(new THREE.Vector3(0, 0, -1), pyramidBase / 2),
         };
 
+        // --- ИЗМЕНЕНО: Новые значения по умолчанию ---
         const params = {
-            sliceX: pyramidBase / 2,
+            sliceX: 54,
             sliceY: pyramidHeight,
             sliceZ: pyramidBase / 2,
-            enableX: false,
+            enableX: true,
             enableY: false,
             enableZ: false,
             showPyramid: true,
-            showVoids: true,
-            showWalls: false,
-            pyramidOpacity: 0.2,
+            showVoids: false,
+            showWalls: true,
         };
 
         init();
@@ -95,11 +94,10 @@
             camera.position.set(pyramidBase * 1.3, pyramidHeight * 1.6, pyramidBase * 1.3);
             camera.lookAt(0, pyramidHeight / 3, 0);
 
-            // --- ВОЗВРАЩЕНО: Простой рендерер без лишних настроек ---
             renderer = new THREE.WebGLRenderer({ antialias: true });
             renderer.setSize(window.innerWidth, window.innerHeight);
             renderer.setPixelRatio(window.devicePixelRatio);
-            renderer.localClippingEnabled = true; // Используем надежное локальное отсечение
+            renderer.localClippingEnabled = true;
             document.body.appendChild(renderer.domElement);
 
             const ambientLight = new THREE.AmbientLight(0xffffff, 0.9);
@@ -121,24 +119,52 @@
             scene.add(axesHelper);
 
             setupGUI();
+
+            // --- ИЗМЕНЕНО: Применяем начальные значения среза ---
+            if (params.enableX) clippingPlanes.x.constant = params.sliceX;
+            if (params.enableY) clippingPlanes.y.constant = params.sliceY;
+            if (params.enableZ) clippingPlanes.z.constant = params.sliceZ;
+
             window.addEventListener('resize', onWindowResize);
         }
 
         function createPyramid() {
-            const pyramidGeometry = new THREE.ConeGeometry(pyramidBase / Math.SQRT2, pyramidHeight, 4, 1, true);
-            pyramidGeometry.rotateY(Math.PI / 4);
+            const pyramidGeometries = [];
+
+            pyramidGeometries.push(new THREE.BoxGeometry(pyramidBase, 1, pyramidBase).translate(0, -0.5, 0));
+
+            for (let y = 0; y < pyramidHeight; y++) {
+                const outerSize = pyramidBase - 2 * y;
+                if (outerSize < 1) continue;
+                const outerHalf = (outerSize - 1) / 2;
+                
+                const yPos = y + 0.5;
+
+                pyramidGeometries.push(new THREE.BoxGeometry(outerSize, 1, 1).translate(0, yPos, outerHalf));
+                pyramidGeometries.push(new THREE.BoxGeometry(outerSize, 1, 1).translate(0, yPos, -outerHalf));
+                pyramidGeometries.push(new THREE.BoxGeometry(1, 1, outerSize - 2).translate(outerHalf, yPos, 0));
+                pyramidGeometries.push(new THREE.BoxGeometry(1, 1, outerSize - 2).translate(-outerHalf, yPos, 0));
+
+                const innerSize = outerSize - 2;
+                if (innerSize >= 1) {
+                    const innerHalf = (innerSize - 1) / 2;
+                    pyramidGeometries.push(new THREE.BoxGeometry(innerSize, 1, 1).translate(0, yPos, innerHalf));
+                    pyramidGeometries.push(new THREE.BoxGeometry(innerSize, 1, 1).translate(0, yPos, -innerHalf));
+                    pyramidGeometries.push(new THREE.BoxGeometry(1, 1, innerSize - 2).translate(innerHalf, yPos, 0));
+                    pyramidGeometries.push(new THREE.BoxGeometry(1, 1, innerSize - 2).translate(-innerHalf, yPos, 0));
+                }
+            }
             
+            const mergedPyramidGeo = BufferGeometryUtils.mergeGeometries(pyramidGeometries);
+
             const pyramidMaterial = new THREE.MeshPhongMaterial({
-                color: 0xFADDAA,
+                color: 0x669966,
                 side: THREE.DoubleSide,
-                transparent: true,
-                opacity: params.pyramidOpacity,
                 clippingPlanes: Object.values(clippingPlanes),
                 clipShadows: true
             });
 
-            pyramidMesh = new THREE.Mesh(pyramidGeometry, pyramidMaterial);
-            pyramidMesh.position.y = pyramidHeight / 2;
+            pyramidMesh = new THREE.Mesh(mergedPyramidGeo, pyramidMaterial);
             scene.add(pyramidMesh);
         }
 
@@ -322,7 +348,6 @@
 
             const viewFolder = gui.addFolder('Режим отображения');
             viewFolder.add(params, 'showPyramid').name('Пирамида').onChange(val => pyramidMesh.visible = val);
-            viewFolder.add(params, 'pyramidOpacity', 0, 1).name('Прозрачность').onChange(val => pyramidMesh.material.opacity = val);
             viewFolder.add(params, 'showVoids').name('Показать пустоты').onChange(val => solidRoomsGroup.visible = val);
             viewFolder.add(params, 'showWalls').name('Показать стены').onChange(val => wallStructureGroup.visible = val);
 
