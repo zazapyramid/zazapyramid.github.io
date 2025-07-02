@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>3D Просмотрщик Пирамиды v25 (Новые умолчания)</title>
+    <title>3D Просмотрщик Пирамиды v34 (Финальное исправление стен)</title>
     <style>
         body { margin: 0; background-color: #1a2a3a; color: #fff; font-family: sans-serif; }
         canvas { display: block; }
@@ -45,13 +45,13 @@
         import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
         import { GUI } from 'three/addons/libs/lil-gui.module.min.js';
         import * as BufferGeometryUtils from 'three/addons/utils/BufferGeometryUtils.js';
+        import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
 
         // --- Основные параметры ---
         const pyramidBase = 209;
         const pyramidHeight = 105;
 
         const centerRoomSize = 67;
-        const sideRoomLength = 67;
         const sideRoomWidth = 34;
         const sideRoomHeight = 34;
         const newRoomSize = 14;
@@ -69,7 +69,6 @@
             z: new THREE.Plane(new THREE.Vector3(0, 0, -1), pyramidBase / 2),
         };
 
-        // --- ИЗМЕНЕНО: Новые значения по умолчанию ---
         const params = {
             sliceX: 54,
             sliceY: pyramidHeight,
@@ -120,7 +119,6 @@
 
             setupGUI();
 
-            // --- ИЗМЕНЕНО: Применяем начальные значения среза ---
             if (params.enableX) clippingPlanes.x.constant = params.sliceX;
             if (params.enableY) clippingPlanes.y.constant = params.sliceY;
             if (params.enableZ) clippingPlanes.z.constant = params.sliceZ;
@@ -130,21 +128,16 @@
 
         function createPyramid() {
             const pyramidGeometries = [];
-
             pyramidGeometries.push(new THREE.BoxGeometry(pyramidBase, 1, pyramidBase).translate(0, -0.5, 0));
-
             for (let y = 0; y < pyramidHeight; y++) {
                 const outerSize = pyramidBase - 2 * y;
                 if (outerSize < 1) continue;
                 const outerHalf = (outerSize - 1) / 2;
-                
                 const yPos = y + 0.5;
-
                 pyramidGeometries.push(new THREE.BoxGeometry(outerSize, 1, 1).translate(0, yPos, outerHalf));
                 pyramidGeometries.push(new THREE.BoxGeometry(outerSize, 1, 1).translate(0, yPos, -outerHalf));
                 pyramidGeometries.push(new THREE.BoxGeometry(1, 1, outerSize - 2).translate(outerHalf, yPos, 0));
                 pyramidGeometries.push(new THREE.BoxGeometry(1, 1, outerSize - 2).translate(-outerHalf, yPos, 0));
-
                 const innerSize = outerSize - 2;
                 if (innerSize >= 1) {
                     const innerHalf = (innerSize - 1) / 2;
@@ -154,150 +147,109 @@
                     pyramidGeometries.push(new THREE.BoxGeometry(1, 1, innerSize - 2).translate(-innerHalf, yPos, 0));
                 }
             }
-            
             const mergedPyramidGeo = BufferGeometryUtils.mergeGeometries(pyramidGeometries);
-
             const pyramidMaterial = new THREE.MeshPhongMaterial({
-                color: 0x669966,
-                side: THREE.DoubleSide,
-                clippingPlanes: Object.values(clippingPlanes),
-                clipShadows: true
+                color: 0x669966, side: THREE.DoubleSide,
+                clippingPlanes: Object.values(clippingPlanes), clipShadows: true
             });
-
             pyramidMesh = new THREE.Mesh(mergedPyramidGeo, pyramidMaterial);
             scene.add(pyramidMesh);
         }
-
+        
         function createInternalStructure() {
             solidRoomsGroup = new THREE.Group();
             wallStructureGroup = new THREE.Group();
 
             const createVoidMaterial = (color) => new THREE.MeshPhongMaterial({
-                color,
-                side: THREE.DoubleSide,
-                shininess: 20,
+                color, side: THREE.DoubleSide, shininess: 20,
                 clippingPlanes: Object.values(clippingPlanes)
             });
-            
             const wallMaterial = new THREE.MeshPhongMaterial({
-                color: 0x669966,
-                side: THREE.DoubleSide, 
-                shininess: 5,
-                clippingPlanes: Object.values(clippingPlanes),
-                clipShadows: true
+                color: 0x669966, side: THREE.DoubleSide, shininess: 5,
+                clippingPlanes: Object.values(clippingPlanes), clipShadows: true
             });
 
             const materials = {
-                center: createVoidMaterial(0xff8888),
-                side: createVoidMaterial(0x88aaff),
-                new: createVoidMaterial(0xf0a0f0),
-                tiny: createVoidMaterial(0xa0f0f0),
-                micro: createVoidMaterial(0xffff00),
-                wall: wallMaterial
+                center: createVoidMaterial(0xff8888), side: createVoidMaterial(0x88aaff),
+                new: createVoidMaterial(0xf0a0f0), tiny: createVoidMaterial(0xa0f0f0),
+                micro: createVoidMaterial(0xffff00), wall: wallMaterial
             };
 
             const t = wallThickness;
             const c_size = centerRoomSize;
             const c_half = c_size / 2;
-            const sr_l = sideRoomLength;
-            const sr_l_half = sr_l / 2;
-            const sr_w = sideRoomWidth;
-            const sr_w_half = sr_w / 2;
-            const sr_h = sideRoomHeight;
-            const nr_s = newRoomSize;
-            const nr_s_half = nr_s / 2;
-            const tr_s = tinyRoomSize;
-            const tr_s_half = tr_s / 2;
-            const mr_s = microRoomSize;
-            const mr_s_half = mr_s / 2;
-            const tw = thickWallThickness;
-            const tw_half = tw / 2;
+            const tw_half = thickWallThickness / 2;
 
-            const rooms = [];
-            const new_rooms = [];
-            const tiny_rooms = [];
+            const voids = []; // Массив для хранения всех "пустот" в формате {x,y,z,w,h,d,type}
             
-            rooms.push({ x: 0, y: c_half, z: 0, w: c_size, h: c_size, d: c_size, type: 'center' });
-            const sideRoomOffsetY = sr_h / 2;
-            const sideRoomOffset = c_half + t + sr_w_half;
-            rooms.push({ x: 0, y: sideRoomOffsetY, z: sideRoomOffset, w: sr_l, h: sr_h, d: sr_w, type: 'side' });
-            rooms.push({ x: 0, y: sideRoomOffsetY, z: -sideRoomOffset, w: sr_l, h: sr_h, d: sr_w, type: 'side' });
-            rooms.push({ x: sideRoomOffset, y: sideRoomOffsetY, z: 0, w: sr_w, h: sr_h, d: sr_l, type: 'side' });
-            rooms.push({ x: -sideRoomOffset, y: sideRoomOffsetY, z: 0, w: sr_w, h: sr_h, d: sr_l, type: 'side' });
+            // 1. Центральная комната
+            voids.push({ x: 0, y: c_half, z: 0, w: c_size, h: c_size, d: c_size, type: 'center' });
             
-            const setA_Y = c_size + t + nr_s_half;
-            const setA_Offset = tw_half + nr_s_half;
-            [[setA_Offset, setA_Offset], [setA_Offset, -setA_Offset], [-setA_Offset, setA_Offset], [-setA_Offset, -setA_Offset]].forEach(([x, z]) => {
-                new_rooms.push({ x, y: setA_Y, z, w: nr_s, h: nr_s, d: nr_s, type: 'new' });
-            });
+            // 2. Функция для создания параметров кольца из 4-х Box-ов
+            function createRingParams(innerR, outerR, height, y_base, type) {
+                const y_center = y_base + height / 2;
+                const params = [];
+                const mid_z = (innerR + outerR) / 2;
+                const width_z = outerR - innerR;
+                const length_z = outerR * 2;
+                
+                const mid_x = (innerR + outerR) / 2;
+                const width_x = outerR - innerR;
+                const length_x = innerR * 2;
+
+                params.push({ x: 0, y: y_center, z: mid_z, w: length_z, h: height, d: width_z, type });
+                params.push({ x: 0, y: y_center, z: -mid_z, w: length_z, h: height, d: width_z, type });
+                params.push({ x: mid_x, y: y_center, z: 0, w: width_x, h: height, d: length_x, type });
+                params.push({ x: -mid_x, y: y_center, z: 0, w: width_x, h: height, d: length_x, type });
+                return params;
+            }
+
+            // 3. Рекурсивная функция для создания многоуровневых коридоров
+            const addNestedLevels = (y_base, inner_r_start, corridor_defs) => {
+                let current_inner_r = inner_r_start;
+                for (let i = 0; i < corridor_defs.length; i++) {
+                    const def = corridor_defs[i];
+                    const outer_r = current_inner_r + def.width;
+                    
+                    voids.push(...createRingParams(current_inner_r, outer_r, def.height, y_base, def.type));
+
+                    const next_y_base = y_base + def.height + t;
+                    const next_corridor_defs = corridor_defs.slice(i + 1);
+                    if (next_corridor_defs.length > 0) {
+                        addNestedLevels(next_y_base, current_inner_r, next_corridor_defs);
+                    }
+                    current_inner_r += def.width + t;
+                }
+            };
             
-            const setB_Y = sr_h + t + nr_s_half;
-            const setB_X_pos = tw_half + nr_s_half;
-            const setB_Z_pos = c_half + t + nr_s_half;
-            [[setB_X_pos, setB_Z_pos], [-setB_X_pos, setB_Z_pos], [setB_X_pos, -setB_Z_pos], [-setB_X_pos, -setB_Z_pos]].forEach(([x, z]) => {
-                new_rooms.push({ x, y: setB_Y, z, w: nr_s, h: nr_s, d: nr_s, type: 'new' });
-                new_rooms.push({ x: z, y: setB_Y, z: x, w: nr_s, h: nr_s, d: nr_s, type: 'new' });
+            // 4. Определяем структуру и запускаем генерацию
+            const corridorLevels = [
+                { y_base: 0, innerR: c_half + t, corridors: [
+                    { width: sideRoomWidth, height: sideRoomHeight, type: 'side' },
+                    { width: newRoomSize, height: newRoomSize, type: 'new' },
+                    { width: tinyRoomSize, height: tinyRoomSize, type: 'tiny' },
+                    { width: microRoomSize, height: microRoomSize, type: 'micro' }
+                ]},
+                { y_base: c_size + t, innerR: tw_half, corridors: [
+                    { width: newRoomSize, height: newRoomSize, type: 'new' },
+                    { width: tinyRoomSize, height: tinyRoomSize, type: 'tiny' },
+                    { width: microRoomSize, height: microRoomSize, type: 'micro' }
+                ]},
+            ];
+
+            corridorLevels.forEach(level => {
+                addNestedLevels(level.y_base, level.innerR, level.corridors);
             });
 
-            const setC_Y = nr_s_half;
-            const setC_pos = sr_l_half + t + nr_s_half;
-             [[setC_pos, setC_pos], [setC_pos, -setC_pos], [-setC_pos, setC_pos], [-setC_pos, -setC_pos]].forEach(([x, z]) => {
-                new_rooms.push({ x, y: setC_Y, z, w: nr_s, h: nr_s, d: nr_s, type: 'new' });
-            });
-
-            const setD_Y = nr_s_half;
-            const setD_center_offset = tw_half + nr_s_half;
-            const setD_outer_offset = c_half + t + sr_w + t + nr_s_half;
-            [[setD_center_offset, setD_outer_offset], [-setD_center_offset, setD_outer_offset], [setD_center_offset, -setD_outer_offset], [-setD_center_offset, -setD_outer_offset]].forEach(([x, z]) => {
-                new_rooms.push({ x, y: setD_Y, z, w: nr_s, h: nr_s, d: nr_s, type: 'new' });
-                new_rooms.push({ x: z, y: setD_Y, z: x, w: nr_s, h: nr_s, d: nr_s, type: 'new' });
-            });
-            
-            rooms.push(...new_rooms);
-
-            new_rooms.forEach(nr => {
-                const {x: nx, y: ny, z: nz} = nr;
-                const sign_x = Math.sign(nx) || 1;
-                const sign_z = Math.sign(nz) || 1;
-                const y_top = ny + nr_s_half + t + tr_s_half;
-                const x_top = nx - sign_x * (nr_s_half - tr_s_half);
-                const z_top = nz - sign_z * (nr_s_half - tr_s_half);
-                tiny_rooms.push({ x: x_top, y: y_top, z: z_top, w: tr_s, h: tr_s, d: tr_s, type: 'tiny' });
-                const y_side = ny - nr_s_half + tr_s_half;
-                const x_side1 = nx + sign_x * (nr_s_half + t + tr_s_half);
-                const z_side1 = nz - sign_z * (nr_s_half - tr_s_half);
-                tiny_rooms.push({ x: x_side1, y: y_side, z: z_side1, w: tr_s, h: tr_s, d: tr_s, type: 'tiny' });
-                const x_side2 = nx - sign_x * (nr_s_half - tr_s_half);
-                const z_side2 = nz + sign_z * (nr_s_half + t + tr_s_half);
-                tiny_rooms.push({ x: x_side2, y: y_side, z: z_side2, w: tr_s, h: tr_s, d: tr_s, type: 'tiny' });
-            });
-            rooms.push(...tiny_rooms);
-
-            tiny_rooms.forEach(tr => {
-                const {x: tx, y: ty, z: tz} = tr;
-                const sign_x = Math.sign(tx) || 1;
-                const sign_z = Math.sign(tz) || 1;
-                const y_top = ty + tr_s_half + t + mr_s_half;
-                const x_top = tx - sign_x * (tr_s_half - mr_s_half);
-                const z_top = tz - sign_z * (tr_s_half - mr_s_half);
-                rooms.push({ x: x_top, y: y_top, z: z_top, w: mr_s, h: mr_s, d: mr_s, type: 'micro' });
-                const y_side = ty - tr_s_half + mr_s_half;
-                const x_side1 = tx + sign_x * (tr_s_half + t + mr_s_half);
-                const z_side1 = tz - sign_z * (tr_s_half - mr_s_half);
-                rooms.push({ x: x_side1, y: y_side, z: z_side1, w: mr_s, h: mr_s, d: mr_s, type: 'micro' });
-                const x_side2 = tx - sign_x * (tr_s_half - mr_s_half);
-                const z_side2 = tz + sign_z * (tr_s_half + t + mr_s_half);
-                rooms.push({ x: x_side2, y: y_side, z: z_side2, w: mr_s, h: mr_s, d: mr_s, type: 'micro' });
-            });
-            
-            rooms.forEach(r => {
-                const mesh = new THREE.Mesh(new THREE.BoxGeometry(r.w, r.h, r.d), materials[r.type]);
-                mesh.position.set(r.x, r.y, r.z);
+            // 5. Создаем меши из геометрий пустот
+            voids.forEach(data => {
+                const mesh = new THREE.Mesh(new THREE.BoxGeometry(data.w, data.h, data.d), materials[data.type]);
+                mesh.position.set(data.x, data.y, data.z);
                 solidRoomsGroup.add(mesh);
             });
             
+            // 6. ИСПРАВЛЕНО: Создаем стены вокруг каждой пустоты
             const allWallGeometries = [];
-
             const createWalledBoxGeos = (r, t) => {
                 const {x, y, z, w, h, d} = r;
                 allWallGeometries.push(new THREE.BoxGeometry(w + 2*t, t, d + 2*t).translate(x, y - h/2 - t/2, z));
@@ -307,32 +259,36 @@
                 allWallGeometries.push(new THREE.BoxGeometry(w, h, t).translate(x, y, z - d/2 - t/2));
                 allWallGeometries.push(new THREE.BoxGeometry(w, h, t).translate(x, y, z + d/2 + t/2));
             };
-            rooms.forEach(r => createWalledBoxGeos(r, t));
+            voids.forEach(v => createWalledBoxGeos(v, t));
             
+            // 7. Добавляем толстые стены
             const getPyramidHeightAt = (x, z) => pyramidHeight - Math.max(Math.abs(x), Math.abs(z)) * (pyramidHeight / (pyramidBase / 2));
             const max_coord = Math.floor(pyramidBase / 2);
             for (let i = -max_coord; i <= max_coord; i++) {
                 const top_y_z = getPyramidHeightAt(tw_half, i);
                 let bottom_y_z = 0;
                 if (Math.abs(i) < c_half) bottom_y_z = c_size;
-                else if (Math.abs(i) > c_half + t && Math.abs(i) < c_half + t + sr_w) bottom_y_z = sr_h;
+                else if (Math.abs(i) > c_half + t && Math.abs(i) < c_half + t + sideRoomWidth) bottom_y_z = sideRoomHeight;
                 const h_z = top_y_z - bottom_y_z;
-                if(h_z > 0) allWallGeometries.push(new THREE.BoxGeometry(tw, h_z, 1).translate(0, bottom_y_z + h_z / 2, i));
+                if(h_z > 0) allWallGeometries.push(new THREE.BoxGeometry(thickWallThickness, h_z, 1).translate(0, bottom_y_z + h_z / 2, i));
 
                 if (Math.abs(i) < tw_half) continue;
                 const top_y_x = getPyramidHeightAt(i, tw_half);
                 let bottom_y_x = 0;
                 if (Math.abs(i) < c_half) bottom_y_x = c_size;
-                else if (Math.abs(i) > c_half + t && Math.abs(i) < c_half + t + sr_w) bottom_y_x = sr_h;
+                else if (Math.abs(i) > c_half + t && Math.abs(i) < c_half + t + sideRoomWidth) bottom_y_x = sideRoomHeight;
                 const h_x = top_y_x - bottom_y_x;
-                if(h_x > 0) allWallGeometries.push(new THREE.BoxGeometry(1, h_x, tw).translate(i, bottom_y_x + h_x / 2, 0));
+                if(h_x > 0) allWallGeometries.push(new THREE.BoxGeometry(1, h_x, thickWallThickness).translate(i, bottom_y_x + h_x / 2, 0));
             }
 
+            // 8. Объединяем все стены в один объект
             if (allWallGeometries.length > 0) {
                 const mergedWallGeometry = BufferGeometryUtils.mergeGeometries(allWallGeometries);
                 if (mergedWallGeometry) {
                     const wallMesh = new THREE.Mesh(mergedWallGeometry, materials.wall);
                     wallStructureGroup.add(wallMesh);
+                } else {
+                     console.error("Слияние геометрий стен не удалось.");
                 }
             }
 
@@ -340,6 +296,42 @@
             solidRoomsGroup.visible = params.showVoids;
             scene.add(solidRoomsGroup);
             scene.add(wallStructureGroup);
+        }
+
+        function exportGLTF() {
+            const exporter = new GLTFExporter();
+            const geometriesToExport = [];
+            if (pyramidMesh && pyramidMesh.visible) {
+                geometriesToExport.push(pyramidMesh.geometry);
+            }
+            if (wallStructureGroup && wallStructureGroup.visible && wallStructureGroup.children.length > 0) {
+                geometriesToExport.push(wallStructureGroup.children[0].geometry);
+            }
+            if (geometriesToExport.length === 0) {
+                alert("Нет видимых стен для экспорта!"); return;
+            }
+            const combinedGeometry = BufferGeometryUtils.mergeGeometries(geometriesToExport, false);
+            if (!combinedGeometry) {
+                console.error("Не удалось объединить геометрии для экспорта.");
+                alert("Ошибка при объединении геометрий."); return;
+            }
+            const exportMesh = new THREE.Mesh(combinedGeometry, new THREE.MeshStandardMaterial({ color: 0x808080 }));
+            exporter.parse( exportMesh, function (result) {
+                    const blob = new Blob([result], { type: 'application/octet-stream' });
+                    const link = document.createElement('a');
+                    link.style.display = 'none';
+                    document.body.appendChild(link);
+                    link.href = URL.createObjectURL(blob);
+                    link.download = 'pyramid_model.glb';
+                    link.click();
+                    document.body.removeChild(link);
+                },
+                function (error) {
+                    console.error('Ошибка при экспорте GLTF', error);
+                    alert("Произошла ошибка при экспорте.");
+                },
+                { binary: true }
+            );
         }
 
         function setupGUI() {
@@ -358,6 +350,10 @@
             clippingFolder.add(params, 'sliceX', -pyramidBase / 2, pyramidBase / 2).name('Позиция среза X').onChange(val => { if(params.enableX) clippingPlanes.x.constant = val; });
             clippingFolder.add(params, 'enableZ').name('Срез Z').onChange(val => clippingPlanes.z.constant = val ? params.sliceZ : pyramidBase / 2);
             clippingFolder.add(params, 'sliceZ', -pyramidBase / 2, pyramidBase / 2).name('Позиция среза Z').onChange(val => { if(params.enableZ) clippingPlanes.z.constant = val; });
+        
+            const exportFolder = gui.addFolder('Экспорт');
+            const exportControls = { exportGLTF: exportGLTF };
+            exportFolder.add(exportControls, 'exportGLTF').name('Скачать .glb');
         }
         
         function onWindowResize() {
