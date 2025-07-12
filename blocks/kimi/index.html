@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Minecraft Круглый Построитель</title>
+    <style>
+        body {
+            font-family: 'Courier New', monospace;
+            background: #2d2d2d;
+            color: #e0e0e0;
+            margin: 0;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            display: grid;
+            grid-template-columns: 300px 1fr;
+            gap: 20px;
+        }
+        
+        .controls {
+            background: #3a3a3a;
+            padding: 20px;
+            border-radius: 8px;
+            height: fit-content;
+        }
+        
+        .control-group {
+            margin-bottom: 15px;
+        }
+        
+        label {
+            display: block;
+            margin-bottom: 5px;
+            color: #ffd700;
+        }
+        
+        input[type="range"], select {
+            width: 100%;
+            background: #555;
+            border: none;
+            padding: 5px;
+            color: #fff;
+        }
+        
+        button {
+            background: #4CAF50;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            cursor: pointer;
+            border-radius: 4px;
+            width: 100%;
+        }
+        
+        button:hover {
+            background: #45a049;
+        }
+        
+        .canvas-container {
+            background: #222;
+            border-radius: 8px;
+            padding: 20px;
+            overflow: auto;
+        }
+        
+        canvas {
+            border: 1px solid #555;
+            max-width: 100%;
+            height: auto;
+            background: #111;
+        }
+        
+        .legend {
+            margin-top: 10px;
+            font-size: 14px;
+            line-height: 1.4;
+        }
+        
+        .legend-item {
+            display: inline-block;
+            margin-right: 15px;
+        }
+        
+        .block-icon {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            margin-right: 4px;
+            vertical-align: middle;
+        }
+        
+        .controls-header {
+            color: #ffd700;
+            font-size: 18px;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+        
+        .value-display {
+            color: #aaa;
+            font-size: 12px;
+        }
+        
+        @media (max-width: 768px) {
+            .container {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="controls">
+            <h2 class="controls-header">🎯 Настройки круга</h2>
+            
+            <div class="control-group">
+                <label for="radius">Радиус: <span id="radiusValue" class="value-display">10</span></label>
+                <input type="range" id="radius" min="5" max="50" value="10">
+            </div>
+            
+            <div class="control-group">
+                <label for="thicknessType">Тип толщины:</label>
+                <select id="thicknessType">
+                    <option value="normal">Обычная округление</option>
+                    <option value="overlap">С перехлестом блоков</option>
+                    <option value="thin">Минимальная (1 блок)</option>
+                </select>
+            </div>
+            
+            <div class="control-group">
+                <label for="blockType">Тип блока:</label>
+                <select id="blockType">
+                    <option value="full">Полные блоки</option>
+                    <option value="stairs">Ступеньки</option>
+                    <option value="slabs">Слэбы</option>
+                    <option value="mixed">Смешанный</option>
+                </select>
+            </div>
+            
+            <div class="control-group">
+                <label for="rotation">Угол вращения (для ступенек):</label>
+                <select id="rotation">
+                    <option value="0">0°</option>
+                    <option value="45">45°</option>
+                    <option value="90">90°</option>
+                    <option value="135">135°</option>
+                </select>
+            </div>
+            
+            <button onclick="redrawCircle()">🔄 Перерисовать</button>
+            
+            <div class="legend">
+                <strong>Легенда:</strong><br>
+                <div class="legend-item">
+                    <span class="block-icon" style="background: #8B4513"></span>
+                    Полные блоки
+                </div>
+                <div class="legend-item">
+                    <span class="block-icon" style="background: #D2691E"></span>
+                    Ступеньки
+                </div>
+                <div class="legend-item">
+                    <span class="block-icon" style="background: #DEB887"></span>
+                    Слэбы
+                </div>
+            </div>
+        </div>
+        
+        <div class="canvas-container">
+            <canvas id="circleCanvas"></canvas>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('circleCanvas');
+        const ctx = canvas.getContext('2d');
+        const pixelSize = 20;
+        
+        // Обновление значений при движении слайдеров
+        document.getElementById('radius').addEventListener('input', function(e) {
+            document.getElementById('radiusValue').textContent = e.target.value;
+        });
+        
+        function redrawCircle() {
+            const radius = parseInt(document.getElementById('radius').value);
+            const thicknessType = document.getElementById('thicknessType').value;
+            const blockType = document.getElementById('blockType').value;
+            const rotation = parseInt(document.getElementById('rotation').value);
+            
+            // Вычисляем размер canvas
+            const size = (radius * 2 + 4) * pixelSize;
+            canvas.width = size;
+            canvas.height = size;
+            
+            // Очищаем canvas
+            ctx.fillStyle = '#111';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            // Центр круга
+            const centerX = canvas.width / 2;
+            const centerY = canvas.height / 2;
+            
+            // Рисуем сетку
+            drawGrid(centerX, centerY, radius);
+            
+            // Рисуем круг
+            drawCircle(centerX, centerY, radius, thicknessType, blockType, rotation);
+            
+            // Рисуем центр
+            drawCenterMark(centerX, centerY);
+        }
+        
+        function drawGrid(centerX, centerY, radius) {
+            ctx.strokeStyle = '#333';
+            ctx.lineWidth = 1;
+            
+            const gridSize = (radius + 2) * pixelSize;
+            
+            for (let x = -gridSize + centerX; x <= gridSize + centerX; x += pixelSize) {
+                ctx.beginPath();
+                ctx.moveTo(x, centerY - gridSize);
+                ctx.lineTo(x, centerY + gridSize);
+                ctx.stroke();
+            }
+            
+            for (let y = -gridSize + centerY; y <= gridSize + centerY; y += pixelSize) {
+                ctx.beginPath();
+                ctx.moveTo(centerX - gridSize, y);
+                ctx.lineTo(centerX + gridSize, y);
+                ctx.stroke();
+            }
+        }
+        
+        function drawCircle(centerX, centerY, radius, thicknessType, blockType, rotation) {
+            const centerOffset = radius * pixelSize;
+            
+            if (thicknessType === 'normal') {
+                drawNormalCircle(centerX, centerY, radius, blockType);
+            } else if (thicknessType === 'overlap') {
+                drawOverlapCircle(centerX, centerY, radius, blockType);
+            } else if (thicknessType === 'thin') {
+                drawThinCircle(centerX, centerY, radius, blockType);
+            }
+        }
+        
+        function drawNormalCircle(centerX, centerY, radius, blockType) {
+            for (let y = -radius; y <= radius; y++) {
+                for (let x = -radius; x <= radius; x++) {
+                    const distance = Math.sqrt(x * x + y * y);
+                    
+                    if (distance >= radius - 0.5 && distance <= radius + 0.5) {
+                        const color = getBlockColor(x, y, blockType, 'normal');
+                        
+                        ctx.fillStyle = color;
+                        ctx.fillRect(
+                            centerX + x * pixelSize,
+                            centerY + y * pixelSize,
+                            pixelSize,
+                            pixelSize
+                        );
+                        
+                        drawBlockType(centerX + x * pixelSize, centerY + y * pixelSize, blockType);
+                    }
+                }
+            }
+        }
+        
+        function drawOverlapCircle(centerX, centerY, radius, blockType) {
+            // Основной круг
+            drawNormalCircle(centerX, centerY, radius, blockType);
+            
+            // Дополнительные блоки для создания "перехлеста"
+            for (let i = 0; i < 8; i++) {
+                const angle = (i * Math.PI * 2) / 8;
+                const x = Math.round(Math.cos(angle) * radius);
+                const y = Math.round(Math.sin(angle) * radius);
+                
+                ctx.fillStyle = '#654321';
+                ctx.fillRect(
+                    centerX + x * pixelSize,
+                    centerY + y * pixelSize,
+                    pixelSize,
+                    pixelSize
+                );
+            }
+        }
+        
+        function drawThinCircle(centerX, centerY, radius, blockType) {
+            for (let y = -radius; y <= radius; y++) {
+                for (let x = -radius; x <= radius; x++) {
+                    const distance = Math.sqrt(x * x + y * y);
+                    
+                    if (Math.abs(distance - radius) < 0.3) {
+                        const color = getBlockColor(x, y, blockType, 'thin');
+                        
+                        ctx.fillStyle = color;
+                        ctx.fillRect(
+                            centerX + x * pixelSize,
+                            centerY + y * pixelSize,
+                            pixelSize,
+                            pixelSize
+                        );
+                    }
+                }
+            }
+        }
+        
+        function getBlockColor(x, y, blockType, thickness) {
+            switch (blockType) {
+                case 'slabs':
+                    return '#DEB887';
+                case 'stairs':
+                    return '#D2691E';
+                case 'mixed':
+                    return (Math.abs(x) + Math.abs(y)) % 3 === 0 ? '#8B4513' : '#D2691E';
+                default:
+                    return '#8B4513';
+            }
+        }
+        
+        function drawBlockType(x, y, blockType) {
+            ctx.strokeStyle = '#000';
+            ctx.lineWidth = 2;
+            
+            if (blockType === 'stairs') {
+                // Рисуем ступеньки
+                ctx.beginPath();
+                ctx.moveTo(x + pixelSize * 0.3, y);
+                ctx.lineTo(x + pixelSize * 0.7, y);
+                ctx.lineTo(x + pixelSize, y + pixelSize * 0.3);
+                ctx.stroke();
+            } else if (blockType === 'slabs') {
+                // Рисуем слэбы
+                ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
+                ctx.fillRect(x, y + pixelSize * 0.5, pixelSize, pixelSize * 0.5);
+            }
+        }
+        
+        function drawCenterMark(centerX, centerY) {
+            ctx.fillStyle = '#ff0000';
+            ctx.fillRect(centerX - 2, centerY - 2, 4, 4);
+            
+            ctx.strokeStyle = '#ff0000';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(centerX - pixelSize, centerY);
+            ctx.lineTo(centerX + pixelSize, centerY);
+            ctx.moveTo(centerX, centerY - pixelSize);
+            ctx.lineTo(centerX, centerY + pixelSize);
+            ctx.stroke();
+        }
+        
+        // Инициализация
+        redrawCircle();
+    </script>
+</body>
+</html>

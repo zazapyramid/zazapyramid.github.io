@@ -1,0 +1,482 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Генератор кругов для Minecraft</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            overflow: hidden; /* Prevent scrollbars from flashing during resize */
+        }
+        canvas {
+            cursor: crosshair;
+            touch-action: none; /* Disable browser gestures like pull-to-refresh */
+        }
+        .control-panel {
+            scrollbar-width: thin;
+            scrollbar-color: #4a5568 #2d3748;
+        }
+        .control-panel::-webkit-scrollbar {
+            width: 8px;
+        }
+        .control-panel::-webkit-scrollbar-track {
+            background: #2d3748;
+        }
+        .control-panel::-webkit-scrollbar-thumb {
+            background-color: #4a5568;
+            border-radius: 10px;
+            border: 2px solid #2d3748;
+        }
+        /* Custom radio button styles */
+        .custom-radio input:checked + .radio-dot {
+            transform: scale(1);
+        }
+    </style>
+</head>
+<body class="bg-gray-800 text-gray-200 flex flex-col md:flex-row h-screen antialiased">
+
+    <!-- Панель управления -->
+    <div class="w-full md:w-80 lg:w-96 bg-gray-900 p-6 shadow-2xl flex-shrink-0 control-panel overflow-y-auto">
+        <div class="space-y-6">
+            <h1 class="text-2xl font-bold text-emerald-400">Генератор Кругов</h1>
+            <p class="text-sm text-gray-400">
+                Создайте идеальную схему круга для вашей постройки в Minecraft.
+            </p>
+
+            <!-- Настройки -->
+            <div class="space-y-6">
+                <!-- Радиус -->
+                <div>
+                    <label for="radius" class="block text-lg font-medium text-gray-300">Радиус: <span id="radius-value" class="font-bold text-emerald-400">16</span></label>
+                    <input type="range" id="radius" min="2" max="100" value="16" class="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-emerald-500 mt-2">
+                </div>
+
+                <!-- Тип круга -->
+                <div>
+                    <h3 class="text-lg font-medium text-gray-300">Тип круга</h3>
+                    <div class="mt-2 space-y-2">
+                        <label class="flex items-center space-x-3 cursor-pointer">
+                            <input type="radio" name="circleType" value="minimal" class="hidden" checked>
+                            <span class="w-5 h-5 border-2 border-gray-500 rounded-full flex items-center justify-center custom-radio">
+                                <span class="w-3 h-3 bg-emerald-400 rounded-full transform scale-0 transition-transform duration-200 radio-dot"></span>
+                            </span>
+                            <span class="text-gray-300">Минимальный (Bresenham)</span>
+                        </label>
+                         <label class="flex items-center space-x-3 cursor-pointer">
+                            <input type="radio" name="circleType" value="filled" class="hidden">
+                            <span class="w-5 h-5 border-2 border-gray-500 rounded-full flex items-center justify-center custom-radio">
+                                <span class="w-3 h-3 bg-emerald-400 rounded-full transform scale-0 transition-transform duration-200 radio-dot"></span>
+                            </span>
+                            <span class="text-gray-300">Заполненный</span>
+                        </label>
+                    </div>
+                </div>
+
+                <!-- Опции сглаживания -->
+                <div>
+                    <h3 class="text-lg font-medium text-gray-300">Сглаживание</h3>
+                    <label class="flex items-center mt-2 space-x-3 cursor-pointer">
+                        <input type="checkbox" id="smoothing" class="w-5 h-5 text-emerald-500 bg-gray-700 border-gray-600 rounded focus:ring-emerald-600 focus:ring-2">
+                        <span class="text-gray-300">Использовать ступени и плиты</span>
+                    </label>
+                     <p class="text-xs text-gray-500 mt-2">
+                        Сглаживание работает только для "Минимального" типа круга. Оно заменяет некоторые полные блоки на ступени и плиты для более плавного вида.
+                    </p>
+                </div>
+                
+                <!-- Информация -->
+                <div class="bg-gray-800/50 p-4 rounded-lg space-y-2">
+                    <h3 class="text-lg font-medium text-gray-300">Информация о постройке</h3>
+                    <div id="block-counts" class="text-gray-400">
+                        <p>Подсчет блоков...</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Холст для рисования -->
+    <div class="flex-grow bg-gray-800 flex items-center justify-center p-4 relative overflow-hidden">
+        <canvas id="minecraft-canvas" class="bg-gray-700 rounded-lg shadow-inner"></canvas>
+        <div id="coords-display" class="absolute bottom-4 right-4 bg-black/50 text-white px-3 py-1 rounded-md text-sm pointer-events-none">
+            X: 0, Y: 0
+        </div>
+    </div>
+
+    <script>
+        // --- DOM Элементы ---
+        const canvas = document.getElementById('minecraft-canvas');
+        const ctx = canvas.getContext('2d');
+        const radiusSlider = document.getElementById('radius');
+        const radiusValue = document.getElementById('radius-value');
+        const smoothingCheckbox = document.getElementById('smoothing');
+        const blockCountsDiv = document.getElementById('block-counts');
+        const coordsDisplay = document.getElementById('coords-display');
+        const circleTypeRadios = document.querySelectorAll('input[name="circleType"]');
+
+        // --- Настройки и состояние ---
+        let settings = {
+            radius: 16,
+            circleType: 'minimal', // 'minimal', 'filled'
+            useSmoothing: false,
+        };
+
+        let view = {
+            zoom: 15,
+            offsetX: 0,
+            offsetY: 0,
+            isDragging: false,
+            lastX: 0,
+            lastY: 0,
+        };
+
+        // --- Инициализация ---
+        function init() {
+            setupCanvas();
+            addEventListeners();
+            draw();
+        }
+
+        function setupCanvas() {
+            const container = canvas.parentElement;
+            const dpr = window.devicePixelRatio || 1;
+            const rect = container.getBoundingClientRect();
+            
+            canvas.width = rect.width * dpr;
+            canvas.height = rect.height * dpr;
+            
+            canvas.style.width = `${rect.width}px`;
+            canvas.style.height = `${rect.height}px`;
+            
+            ctx.scale(dpr, dpr);
+
+            view.offsetX = rect.width / 2;
+            view.offsetY = rect.height / 2;
+        }
+
+        // --- Обработчики событий ---
+        function addEventListeners() {
+            radiusSlider.addEventListener('input', (e) => {
+                settings.radius = parseInt(e.target.value, 10);
+                radiusValue.textContent = settings.radius;
+                draw();
+            });
+
+            smoothingCheckbox.addEventListener('input', (e) => {
+                settings.useSmoothing = e.target.checked;
+                draw();
+            });
+
+            circleTypeRadios.forEach(radio => {
+                radio.addEventListener('change', (e) => {
+                    settings.circleType = e.target.value;
+                    // Сглаживание доступно только для минимального круга
+                    if (settings.circleType !== 'minimal') {
+                        smoothingCheckbox.checked = false;
+                        smoothingCheckbox.disabled = true;
+                        settings.useSmoothing = false;
+                    } else {
+                        smoothingCheckbox.disabled = false;
+                    }
+                    draw();
+                });
+            });
+
+            window.addEventListener('resize', () => {
+                setupCanvas();
+                draw();
+            });
+            
+            // Панорамирование и масштабирование
+            canvas.addEventListener('mousedown', (e) => {
+                view.isDragging = true;
+                view.lastX = e.clientX;
+                view.lastY = e.clientY;
+            });
+            
+            canvas.addEventListener('mouseup', () => view.isDragging = false);
+            canvas.addEventListener('mouseleave', () => view.isDragging = false);
+            
+            canvas.addEventListener('mousemove', (e) => {
+                const rect = canvas.getBoundingClientRect();
+                const mouseX = (e.clientX - rect.left - view.offsetX) / view.zoom;
+                const mouseY = (e.clientY - rect.top - view.offsetY) / view.zoom;
+                coordsDisplay.textContent = `X: ${Math.floor(mouseX)}, Y: ${-Math.ceil(mouseY)}`;
+
+                if (view.isDragging) {
+                    view.offsetX += e.clientX - view.lastX;
+                    view.offsetY += e.clientY - view.lastY;
+                    view.lastX = e.clientX;
+                    view.lastY = e.clientY;
+                    draw();
+                }
+            });
+
+            canvas.addEventListener('wheel', (e) => {
+                e.preventDefault();
+                const scaleAmount = 1.1;
+                const rect = canvas.getBoundingClientRect();
+                const mouseX = e.clientX - rect.left;
+                const mouseY = e.clientY - rect.top;
+
+                if (e.deltaY < 0) { // Zoom in
+                    view.zoom *= scaleAmount;
+                    view.offsetX = mouseX - (mouseX - view.offsetX) * scaleAmount;
+                    view.offsetY = mouseY - (mouseY - view.offsetY) * scaleAmount;
+                } else { // Zoom out
+                    view.zoom /= scaleAmount;
+                     view.offsetX = mouseX - (mouseX - view.offsetX) / scaleAmount;
+                    view.offsetY = mouseY - (mouseY - view.offsetY) / scaleAmount;
+                }
+                view.zoom = Math.max(2, Math.min(50, view.zoom)); // Ограничение зума
+                draw();
+            });
+        }
+
+        // --- Логика генерации круга ---
+        function generateCircle() {
+            let blocks = new Map(); // Используем Map для уникальных координат "x,y"
+            const r = settings.radius;
+
+            if (settings.circleType === 'filled') {
+                 for (let y = -r; y <= r; y++) {
+                    for (let x = -r; x <= r; x++) {
+                        if (x * x + y * y <= r * r) {
+                            blocks.set(`${x},${y}`, { type: 'full' });
+                        }
+                    }
+                }
+                return blocks;
+            }
+
+            // Алгоритм средней точки (Bresenham) для "Минимального" круга
+            let x = r;
+            let y = 0;
+            let err = 1 - r;
+
+            while (x >= y) {
+                // Добавляем 8 симметричных точек
+                addBlock(blocks, x, y); addBlock(blocks, y, x);
+                addBlock(blocks, -y, x); addBlock(blocks, -x, y);
+                addBlock(blocks, -x, -y); addBlock(blocks, -y, -x);
+                addBlock(blocks, y, -x); addBlock(blocks, x, -y);
+                
+                y++;
+                if (err < 0) {
+                    err += 2 * y + 1;
+                } else {
+                    x--;
+                    err += 2 * (y - x) + 1;
+                }
+            }
+            
+            if (settings.useSmoothing && settings.circleType === 'minimal') {
+                return applySmoothing(blocks);
+            }
+
+            return blocks;
+        }
+        
+        function addBlock(blocks, x, y, data = { type: 'full' }) {
+            blocks.set(`${x},${y}`, data);
+        }
+
+        function applySmoothing(blocks) {
+            const smoothedBlocks = new Map(blocks);
+            const points = Array.from(blocks.keys()).map(k => {
+                const [x, y] = k.split(',').map(Number);
+                return {x, y};
+            });
+
+            for (const p of points) {
+                const { x, y } = p;
+
+                // Проверяем соседей
+                const has = (dx, dy) => blocks.has(`${x + dx},${y + dy}`);
+                
+                const N = has(0, 1);
+                const S = has(0, -1);
+                const E = has(1, 0);
+                const W = has(-1, 0);
+                const NE = has(1, 1);
+                const NW = has(-1, 1);
+                const SE = has(1, -1);
+                const SW = has(-1, -1);
+
+                // Правила для ступеней (углы)
+                if (E && N && !NE) { // Внутренний угол
+                    smoothedBlocks.set(`${x},${y}`, { type: 'stair', orientation: 'SW' });
+                } else if (W && N && !NW) {
+                    smoothedBlocks.set(`${x},${y}`, { type: 'stair', orientation: 'SE' });
+                } else if (E && S && !SE) {
+                    smoothedBlocks.set(`${x},${y}`, { type: 'stair', orientation: 'NW' });
+                } else if (W && S && !SW) {
+                    smoothedBlocks.set(`${x},${y}`, { type: 'stair', orientation: 'NE' });
+                }
+                // Правила для плит (сглаживание "лестниц")
+                else if (E && !W && !N && !S) { // Конец горизонтальной линии
+                     if (has(1,1) && has(1,-1)) { // Если зажат между блоками по диагонали
+                         smoothedBlocks.set(`${x},${y}`, { type: 'slab', orientation: 'full' });
+                     }
+                } else if (N && !S && !E && !W) { // Конец вертикальной линии
+                     if (has(1,1) && has(-1,1)) {
+                         smoothedBlocks.set(`${x},${y}`, { type: 'slab', orientation: 'full' });
+                     }
+                }
+            }
+            return smoothedBlocks;
+        }
+
+        // --- Логика отрисовки ---
+        function draw() {
+            const rect = canvas.getBoundingClientRect();
+            ctx.clearRect(0, 0, rect.width, rect.height);
+            
+            ctx.save();
+            ctx.translate(view.offsetX, view.offsetY);
+            ctx.scale(view.zoom, view.zoom);
+
+            drawGrid();
+            
+            const blocks = generateCircle();
+            drawBlocks(blocks);
+            updateBlockCounts(blocks);
+
+            // Рисуем центральную точку
+            ctx.fillStyle = 'rgba(255, 0, 0, 0.7)';
+            ctx.fillRect(-0.25, -0.25, 0.5, 0.5);
+
+            ctx.restore();
+        }
+
+        function drawGrid() {
+            const rect = canvas.getBoundingClientRect();
+            const startX = Math.floor(-view.offsetX / view.zoom);
+            const endX = startX + Math.ceil(rect.width / view.zoom);
+            const startY = Math.floor(-view.offsetY / view.zoom);
+            const endY = startY + Math.ceil(rect.height / view.zoom);
+            
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.08)';
+            ctx.lineWidth = 1 / view.zoom;
+
+            ctx.beginPath();
+            for (let x = startX; x <= endX; x++) {
+                ctx.moveTo(x, startY);
+                ctx.lineTo(x, endY);
+            }
+            for (let y = startY; y <= endY; y++) {
+                ctx.moveTo(startX, y);
+                ctx.lineTo(endX, y);
+            }
+            ctx.stroke();
+
+            // Центральные оси
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
+            ctx.beginPath();
+            ctx.moveTo(0, startY);
+            ctx.lineTo(0, endY);
+            ctx.moveTo(startX, 0);
+            ctx.lineTo(endX, 0);
+            ctx.stroke();
+        }
+
+        function drawBlocks(blocks) {
+            const margin = 0.05; // Небольшой отступ между блоками
+            const size = 1 - margin * 2;
+
+            for (const [key, data] of blocks.entries()) {
+                const [x, y] = key.split(',').map(Number);
+
+                ctx.fillStyle = '#a7f3d0'; // Светло-зеленый для полных блоков
+
+                if (data.type === 'full') {
+                    ctx.fillRect(x - 0.5 + margin, -y - 0.5 + margin, size, size);
+                } else if (data.type === 'slab') {
+                    ctx.fillStyle = '#34d399'; // Зеленый для плит
+                    ctx.fillRect(x - 0.5 + margin, -y, size, size / 2); // Рисуем нижнюю плиту
+                } else if (data.type === 'stair') {
+                    ctx.fillStyle = '#059669'; // Темно-зеленый для ступеней
+                    drawStair(x, y, data.orientation, margin, size);
+                }
+            }
+        }
+        
+        function drawStair(x, y, orientation, margin, size) {
+            const half = size / 2;
+            const ox = x - 0.5 + margin;
+            const oy = -y - 0.5 + margin;
+
+            ctx.beginPath();
+            switch (orientation) {
+                case 'SW': // смотрит на юго-запад
+                    ctx.moveTo(ox, oy);
+                    ctx.lineTo(ox + size, oy);
+                    ctx.lineTo(ox + size, oy + half);
+                    ctx.lineTo(ox + half, oy + half);
+                    ctx.lineTo(ox + half, oy + size);
+                    ctx.lineTo(ox, oy + size);
+                    break;
+                case 'SE': // смотрит на юго-восток
+                    ctx.moveTo(ox + size, oy);
+                    ctx.lineTo(ox, oy);
+                    ctx.lineTo(ox, oy + size);
+                    ctx.lineTo(ox + half, oy + size);
+                    ctx.lineTo(ox + half, oy + half);
+                    ctx.lineTo(ox + size, oy + half);
+                    break;
+                case 'NW': // смотрит на северо-запад
+                    ctx.moveTo(ox, oy + size);
+                    ctx.lineTo(ox, oy);
+                    ctx.lineTo(ox + size, oy);
+                    ctx.lineTo(ox + size, oy + half);
+                    ctx.lineTo(ox + half, oy + half);
+                    ctx.lineTo(ox + half, oy + size);
+                    break;
+                case 'NE': // смотрит на северо-восток
+                    ctx.moveTo(ox + size, oy + size);
+                    ctx.lineTo(ox, oy + size);
+                    ctx.lineTo(ox, oy);
+                    ctx.lineTo(ox + half, oy);
+                    ctx.lineTo(ox + half, oy + half);
+                    ctx.lineTo(ox + size, oy + half);
+                    break;
+                default:
+                    ctx.rect(ox, oy, size, size); // Fallback
+            }
+            ctx.closePath();
+            ctx.fill();
+        }
+        
+        function updateBlockCounts(blocks) {
+            const counts = {
+                full: 0,
+                stair: 0,
+                slab: 0,
+                total: blocks.size
+            };
+
+            for (const data of blocks.values()) {
+                counts[data.type]++;
+            }
+
+            let html = `<p>Всего блоков: <span class="font-semibold text-white">${counts.total}</span></p>`;
+            if (settings.useSmoothing && settings.circleType === 'minimal') {
+                html += `
+                    <p>Полные блоки: <span class="font-semibold text-white">${counts.full}</span></p>
+                    <p>Ступени: <span class="font-semibold text-white">${counts.stair}</span></p>
+                    <p>Плиты: <span class="font-semibold text-white">${counts.slab}</span></p>
+                `;
+            }
+            blockCountsDiv.innerHTML = html;
+        }
+
+        // --- Запуск ---
+        document.addEventListener('DOMContentLoaded', init);
+    </script>
+</body>
+</html>
